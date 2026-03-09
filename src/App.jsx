@@ -10,7 +10,6 @@ import {
   Button,
   Avatar,
   Drawer,
-  Divider,
   IconButton,
   Tooltip,
   Snackbar,
@@ -21,13 +20,14 @@ import MenuIcon from '@mui/icons-material/Menu'
 import QueueMusicIcon from '@mui/icons-material/QueueMusic'
 import LogoutIcon from '@mui/icons-material/Logout'
 import LoginIcon from '@mui/icons-material/Login'
+import SettingsIcon from '@mui/icons-material/Settings'
 
 import { useGoogleAuth } from './hooks/useGoogleAuth'
 import { useSetlists } from './hooks/useSetlists'
-import FolderPicker from './components/FolderPicker'
 import SongList from './components/SongList'
 import SongViewer from './components/SongViewer'
 import SetlistManager from './components/SetlistManager'
+import SettingsDialog from './components/SettingsDialog'
 
 const theme = createTheme({
   palette: {
@@ -42,7 +42,6 @@ const theme = createTheme({
   shape: { borderRadius: 8 },
 })
 
-const SONG_LIST_WIDTH = 260
 const SETLIST_WIDTH = 280
 const FOLDER_KEY = 'setlist-app-folder-id'
 
@@ -61,7 +60,8 @@ export default function App() {
   const [folderId, setFolderId] = useState(() => localStorage.getItem(FOLDER_KEY) || '')
   const [selectedSong, setSelectedSong] = useState(null)
   const [activeSetlistId, setActiveSetlistId] = useState(null)
-  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false)
+  const [setlistDrawerOpen, setSetlistDrawerOpen] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const [snackbar, setSnackbar] = useState(null)
 
   const isMobile = useMediaQuery(theme.breakpoints.down('md'))
@@ -85,44 +85,14 @@ export default function App() {
     })
   }
 
-  const songListPanel = (
-    <Box
-      sx={{
-        width: SONG_LIST_WIDTH,
-        height: '100%',
-        display: 'flex',
-        flexDirection: 'column',
-        borderRight: 1,
-        borderColor: 'divider',
-        bgcolor: 'background.paper',
-        overflow: 'hidden',
-      }}
-    >
-      <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-        <FolderPicker folderId={folderId} onFolderSet={handleFolderSet} currentFolderId={folderId} />
-      </Box>
-      <Box sx={{ flex: 1, overflow: 'auto' }}>
-        {isSignedIn ? (
-          <SongList
-            folderId={folderId}
-            onSongSelect={(song) => {
-              setSelectedSong(song)
-              if (isMobile) setMobileDrawerOpen(false)
-            }}
-            selectedSongId={selectedSong?.id}
-            activeSetlistId={activeSetlistId}
-            onAddToSetlist={handleAddToSetlist}
-          />
-        ) : (
-          <Box sx={{ p: 2, textAlign: 'center' }}>
-            <Typography variant="body2" color="text.secondary">
-              Sign in to load songs
-            </Typography>
-          </Box>
-        )}
-      </Box>
-    </Box>
-  )
+  const handleSongSelect = (song) => {
+    setSelectedSong(song)
+    setSetlistDrawerOpen(false)
+  }
+
+  const handleBack = () => {
+    setSelectedSong(null)
+  }
 
   const setlistPanel = (
     <Box
@@ -146,7 +116,7 @@ export default function App() {
         onRenameSetlist={renameSetlist}
         onRemoveSong={removeSongFromSetlist}
         onMoveSong={moveSongInSetlist}
-        onSongSelect={setSelectedSong}
+        onSongSelect={handleSongSelect}
       />
     </Box>
   )
@@ -158,20 +128,28 @@ export default function App() {
         {/* App Bar */}
         <AppBar position="static" elevation={0} sx={{ borderBottom: 1, borderColor: 'divider' }}>
           <Toolbar variant="dense">
-            {isMobile && (
+            {/* Setlist drawer toggle — only on mobile when not viewing a song */}
+            {isMobile && !selectedSong && (
               <IconButton
                 edge="start"
                 color="inherit"
-                onClick={() => setMobileDrawerOpen(true)}
+                onClick={() => setSetlistDrawerOpen(true)}
                 sx={{ mr: 1 }}
               >
                 <MenuIcon />
               </IconButton>
             )}
+
             <QueueMusicIcon sx={{ mr: 1 }} />
             <Typography variant="h6" fontWeight={700} sx={{ flexGrow: 1 }}>
               Setlist App
             </Typography>
+
+            <Tooltip title="Settings">
+              <IconButton color="inherit" onClick={() => setSettingsOpen(true)} size="small" sx={{ mr: 1 }}>
+                <SettingsIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
 
             {isSignedIn ? (
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -212,33 +190,58 @@ export default function App() {
 
         {/* Main layout */}
         <Box sx={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-          {/* Song list sidebar — hidden on mobile, use Drawer instead */}
-          {!isMobile && songListPanel}
-
-          {/* Central song viewer */}
-          <Box sx={{ flex: 1, display: 'flex', overflow: 'hidden', bgcolor: 'background.default' }}>
+          {selectedSong ? (
+            /* Full-page song viewer */
             <SongViewer
               song={selectedSong}
               accessToken={accessToken}
               activeSetlistId={activeSetlistId}
               onAddToSetlist={handleAddToSetlist}
+              onBack={handleBack}
             />
-          </Box>
+          ) : (
+            /* Song list + setlist sidebar */
+            <>
+              <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', bgcolor: 'background.default' }}>
+                {isSignedIn ? (
+                  <SongList
+                    folderId={folderId}
+                    onSongSelect={handleSongSelect}
+                    selectedSongId={selectedSong?.id}
+                    activeSetlistId={activeSetlistId}
+                    onAddToSetlist={handleAddToSetlist}
+                    onOpenSettings={() => setSettingsOpen(true)}
+                  />
+                ) : (
+                  <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 2, color: 'text.disabled' }}>
+                    <Typography variant="body1">Sign in to load songs</Typography>
+                  </Box>
+                )}
+              </Box>
 
-          {/* Setlist panel — hidden on mobile */}
-          {!isMobile && setlistPanel}
+              {/* Setlist sidebar — desktop only */}
+              {!isMobile && setlistPanel}
+            </>
+          )}
         </Box>
 
-        {/* Mobile drawer */}
+        {/* Mobile setlist drawer */}
         <Drawer
-          anchor="left"
-          open={mobileDrawerOpen}
-          onClose={() => setMobileDrawerOpen(false)}
-          PaperProps={{ sx: { width: SONG_LIST_WIDTH + SETLIST_WIDTH, display: 'flex', flexDirection: 'row' } }}
+          anchor="right"
+          open={setlistDrawerOpen}
+          onClose={() => setSetlistDrawerOpen(false)}
+          PaperProps={{ sx: { width: SETLIST_WIDTH } }}
         >
-          {songListPanel}
           {setlistPanel}
         </Drawer>
+
+        {/* Settings dialog */}
+        <SettingsDialog
+          open={settingsOpen}
+          onClose={() => setSettingsOpen(false)}
+          folderId={folderId}
+          onFolderSet={handleFolderSet}
+        />
 
         {/* Snackbar feedback */}
         <Snackbar
