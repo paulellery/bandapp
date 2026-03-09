@@ -10,6 +10,7 @@ import {
   Alert,
   Chip,
   Divider,
+  Button,
 } from '@mui/material'
 import MusicNoteIcon from '@mui/icons-material/MusicNote'
 import AddIcon from '@mui/icons-material/Add'
@@ -22,6 +23,7 @@ export default function SongList({
   selectedSongId,
   activeSetlistId,
   onAddToSetlist,
+  onOpenSettings,
 }) {
   const [songs, setSongs] = useState([])
   const [loading, setLoading] = useState(false)
@@ -54,10 +56,15 @@ export default function SongList({
 
   if (!folderId) {
     return (
-      <Box sx={{ p: 2, textAlign: 'center' }}>
-        <Typography variant="body2" color="text.secondary">
-          Set a folder to load songs
+      <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2, p: 4, color: 'text.disabled' }}>
+        <Typography variant="body1" color="text.secondary" textAlign="center">
+          No folder configured yet.
         </Typography>
+        {onOpenSettings && (
+          <Button variant="outlined" size="small" onClick={onOpenSettings}>
+            Open Settings
+          </Button>
+        )}
       </Box>
     )
   }
