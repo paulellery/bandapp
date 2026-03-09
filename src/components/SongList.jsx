@@ -1,149 +1,264 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import {
   List,
+  ListItem,
   ListItemButton,
   ListItemText,
   ListItemIcon,
   Typography,
   CircularProgress,
   Box,
-  Alert,
-  Chip,
-  Divider,
   Button,
+  IconButton,
+  Tooltip,
+  Menu,
+  MenuItem,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
+  Divider,
 } from '@mui/material'
 import MusicNoteIcon from '@mui/icons-material/MusicNote'
 import AddIcon from '@mui/icons-material/Add'
-import IconButton from '@mui/material/IconButton'
-import Tooltip from '@mui/material/Tooltip'
+import MoreVertIcon from '@mui/icons-material/MoreVert'
+import CloudDownloadIcon from '@mui/icons-material/CloudDownload'
+import ArticleIcon from '@mui/icons-material/Article'
 
 export default function SongList({
+  songs,
+  setlists,
   folderId,
   onSongSelect,
   selectedSongId,
-  activeSetlistId,
-  onAddToSetlist,
+  onAddToSetlist,   // (song, setlistId) => void
+  onRemoveSong,     // (songId) => void
+  onImportFromDrive,
+  onAddManualSong,  // (name) => void
   onOpenSettings,
+  importing,
 }) {
-  const [songs, setSongs] = useState([])
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState(null)
+  const [menuAnchor, setMenuAnchor] = useState(null)
+  const [menuSong, setMenuSong] = useState(null)
+  const [setlistMenuAnchor, setSetlistMenuAnchor] = useState(null)
+  const [addManualOpen, setAddManualOpen] = useState(false)
+  const [newSongName, setNewSongName] = useState('')
 
-  useEffect(() => {
-    if (!folderId) return
-
-    const fetchSongs = async () => {
-      setLoading(true)
-      setError(null)
-      try {
-        const response = await window.gapi.client.drive.files.list({
-          q: `'${folderId}' in parents and mimeType='application/vnd.google-apps.document' and trashed=false`,
-          fields: 'files(id, name, modifiedTime)',
-          orderBy: 'name',
-          pageSize: 200,
-        })
-        setSongs(response.result.files || [])
-      } catch (err) {
-        console.error('Failed to fetch songs:', err)
-        setError(err.result?.error?.message || 'Failed to load songs. Check the folder ID and permissions.')
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    fetchSongs()
-  }, [folderId])
-
-  if (!folderId) {
-    return (
-      <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2, p: 4, color: 'text.disabled' }}>
-        <Typography variant="body1" color="text.secondary" textAlign="center">
-          No folder configured yet.
-        </Typography>
-        {onOpenSettings && (
-          <Button variant="outlined" size="small" onClick={onOpenSettings}>
-            Open Settings
-          </Button>
-        )}
-      </Box>
-    )
+  const openMenu = (e, song) => {
+    e.stopPropagation()
+    setMenuAnchor(e.currentTarget)
+    setMenuSong(song)
   }
 
-  if (loading) {
-    return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
-        <CircularProgress size={24} />
-      </Box>
-    )
+  const closeMenu = () => {
+    setMenuAnchor(null)
+    setMenuSong(null)
+    setSetlistMenuAnchor(null)
   }
 
-  if (error) {
-    return (
-      <Box sx={{ p: 2 }}>
-        <Alert severity="error" sx={{ fontSize: '0.75rem' }}>
-          {error}
-        </Alert>
-      </Box>
-    )
-  }
-
-  if (songs.length === 0) {
-    return (
-      <Box sx={{ p: 2, textAlign: 'center' }}>
-        <Typography variant="body2" color="text.secondary">
-          No Google Docs found in this folder
-        </Typography>
-      </Box>
-    )
+  const handleAddManual = () => {
+    if (!newSongName.trim()) return
+    onAddManualSong(newSongName.trim())
+    setNewSongName('')
+    setAddManualOpen(false)
   }
 
   return (
-    <Box>
-      <Box sx={{ px: 2, py: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <Typography variant="caption" color="text.secondary">
-          {songs.length} song{songs.length !== 1 ? 's' : ''}
+    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      {/* Toolbar */}
+      <Box
+        sx={{
+          px: 2,
+          py: 1,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1,
+          borderBottom: 1,
+          borderColor: 'divider',
+          flexShrink: 0,
+        }}
+      >
+        <Typography variant="subtitle2" fontWeight={600} sx={{ flex: 1 }}>
+          All Songs
+          {songs.length > 0 && (
+            <Typography component="span" variant="caption" color="text.secondary" sx={{ ml: 1 }}>
+              ({songs.length})
+            </Typography>
+          )}
         </Typography>
-      </Box>
-      <Divider />
-      <List dense disablePadding>
-        {songs.map((song) => (
-          <ListItemButton
-            key={song.id}
-            selected={song.id === selectedSongId}
-            onClick={() => onSongSelect(song)}
-            sx={{
-              '&.Mui-selected': {
-                bgcolor: 'primary.main',
-                color: 'primary.contrastText',
-                '&:hover': { bgcolor: 'primary.dark' },
-                '& .MuiListItemIcon-root': { color: 'inherit' },
-              },
+
+        {folderId ? (
+          <Tooltip title="Import from Google Drive folder">
+            <span>
+              <IconButton size="small" onClick={onImportFromDrive} disabled={importing}>
+                {importing ? (
+                  <CircularProgress size={16} />
+                ) : (
+                  <CloudDownloadIcon fontSize="small" />
+                )}
+              </IconButton>
+            </span>
+          </Tooltip>
+        ) : (
+          onOpenSettings && (
+            <Button size="small" variant="outlined" onClick={onOpenSettings}>
+              Configure Folder
+            </Button>
+          )
+        )}
+
+        <Tooltip title="Add song manually">
+          <IconButton
+            size="small"
+            onClick={() => {
+              setNewSongName('')
+              setAddManualOpen(true)
             }}
           >
-            <ListItemIcon sx={{ minWidth: 32 }}>
-              <MusicNoteIcon fontSize="small" />
-            </ListItemIcon>
-            <ListItemText
-              primary={song.name}
-              primaryTypographyProps={{ variant: 'body2', noWrap: true }}
-            />
-            {activeSetlistId && (
-              <Tooltip title="Add to setlist">
-                <IconButton
-                  size="small"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    onAddToSetlist(song)
+            <AddIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
+      </Box>
+
+      {/* Song list */}
+      <Box sx={{ flex: 1, overflow: 'auto' }}>
+        {songs.length === 0 ? (
+          <Box sx={{ p: 4, textAlign: 'center', color: 'text.disabled' }}>
+            <MusicNoteIcon sx={{ fontSize: 48, mb: 1, opacity: 0.4 }} />
+            <Typography variant="body2" color="text.secondary">
+              No songs yet
+            </Typography>
+            <Typography variant="caption" color="text.disabled" display="block" sx={{ mt: 0.5 }}>
+              {folderId
+                ? 'Import from Google Drive or add songs manually'
+                : 'Configure a Google Drive folder or add songs manually'}
+            </Typography>
+          </Box>
+        ) : (
+          <List dense disablePadding>
+            {songs.map((song) => (
+              <ListItem
+                key={song.id}
+                disablePadding
+                secondaryAction={
+                  <IconButton size="small" edge="end" onClick={(e) => openMenu(e, song)}>
+                    <MoreVertIcon fontSize="small" />
+                  </IconButton>
+                }
+              >
+                <ListItemButton
+                  selected={song.id === selectedSongId}
+                  onClick={() => onSongSelect(song)}
+                  sx={{
+                    pr: 5,
+                    '&.Mui-selected': {
+                      bgcolor: 'primary.main',
+                      color: 'primary.contrastText',
+                      '&:hover': { bgcolor: 'primary.dark' },
+                      '& .MuiListItemIcon-root': { color: 'inherit' },
+                    },
                   }}
-                  sx={{ ml: 0.5, opacity: 0.7, '&:hover': { opacity: 1 } }}
                 >
-                  <AddIcon fontSize="small" />
-                </IconButton>
-              </Tooltip>
-            )}
-          </ListItemButton>
-        ))}
-      </List>
+                  <ListItemIcon sx={{ minWidth: 32 }}>
+                    <MusicNoteIcon fontSize="small" />
+                  </ListItemIcon>
+                  <ListItemText
+                    primary={song.name}
+                    primaryTypographyProps={{ variant: 'body2', noWrap: true }}
+                  />
+                  {song.hasLyrics && (
+                    <Tooltip title="Lyric sheet available">
+                      <ArticleIcon
+                        fontSize="small"
+                        color="primary"
+                        sx={{ opacity: 0.7, ml: 1, flexShrink: 0 }}
+                      />
+                    </Tooltip>
+                  )}
+                </ListItemButton>
+              </ListItem>
+            ))}
+          </List>
+        )}
+      </Box>
+
+      {/* Song "..." context menu */}
+      <Menu anchorEl={menuAnchor} open={Boolean(menuAnchor)} onClose={closeMenu}>
+        <MenuItem
+          onClick={(e) => {
+            setSetlistMenuAnchor(e.currentTarget)
+          }}
+        >
+          Add to setlist…
+        </MenuItem>
+        <Divider />
+        <MenuItem
+          onClick={() => {
+            onRemoveSong(menuSong?.id)
+            closeMenu()
+          }}
+          sx={{ color: 'error.main' }}
+        >
+          Remove
+        </MenuItem>
+      </Menu>
+
+      {/* Setlist picker submenu */}
+      <Menu
+        anchorEl={setlistMenuAnchor}
+        open={Boolean(setlistMenuAnchor)}
+        onClose={() => setSetlistMenuAnchor(null)}
+        anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
+        transformOrigin={{ vertical: 'top', horizontal: 'left' }}
+      >
+        {setlists.length === 0 ? (
+          <MenuItem disabled>No setlists — create one first</MenuItem>
+        ) : (
+          setlists.map((sl) => (
+            <MenuItem
+              key={sl.id}
+              onClick={() => {
+                onAddToSetlist(menuSong, sl.id)
+                closeMenu()
+              }}
+            >
+              {sl.name}
+            </MenuItem>
+          ))
+        )}
+      </Menu>
+
+      {/* Add manual song dialog */}
+      <Dialog
+        open={addManualOpen}
+        onClose={() => setAddManualOpen(false)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>Add Song</DialogTitle>
+        <DialogContent>
+          <TextField
+            autoFocus
+            fullWidth
+            label="Song name"
+            value={newSongName}
+            onChange={(e) => setNewSongName(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleAddManual()}
+            sx={{ mt: 1 }}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setAddManualOpen(false)}>Cancel</Button>
+          <Button
+            variant="contained"
+            onClick={handleAddManual}
+            disabled={!newSongName.trim()}
+          >
+            Add
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   )
 }
