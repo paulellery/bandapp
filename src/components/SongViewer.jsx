@@ -9,18 +9,18 @@ import {
   Button,
   Chip,
 } from '@mui/material'
-import AddIcon from '@mui/icons-material/Add'
 import MusicNoteIcon from '@mui/icons-material/MusicNote'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 import PlayArrowIcon from '@mui/icons-material/PlayArrow'
 import PauseIcon from '@mui/icons-material/Pause'
+import ArticleOffIcon from '@mui/icons-material/ArticleOutlined'
 
 const MIN_SPEED = 5
 const MAX_SPEED = 200
 const SPEED_STEP = 10
 const DEFAULT_SPEED = 30
 
-export default function SongViewer({ song, accessToken, activeSetlistId, onAddToSetlist, onBack }) {
+export default function SongViewer({ song, accessToken, onBack }) {
   const [content, setContent] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
@@ -53,18 +53,24 @@ export default function SongViewer({ song, accessToken, activeSetlistId, onAddTo
     return () => cancelAnimationFrame(animRef.current)
   }, [autoscroll])
 
-  // Fetch song content and reset autoscroll on song change
+  // Fetch song content on song change
   useEffect(() => {
     setAutoscroll(false)
-    if (!song || !accessToken) return
+    setContent(null)
+    setError(null)
+
+    // Manual songs have no driveId — nothing to fetch
+    if (!song?.driveId && !song?.id) return
+    // Skip fetch for manual songs (no drive file)
+    const fileId = song.driveId || song.id
+    if (!fileId || fileId.startsWith('manual-')) return
+    if (!accessToken) return
 
     const fetchContent = async () => {
       setLoading(true)
-      setError(null)
-      setContent(null)
       try {
         const response = await fetch(
-          `https://www.googleapis.com/drive/v3/files/${song.id}/export?mimeType=text/plain`,
+          `https://www.googleapis.com/drive/v3/files/${fileId}/export?mimeType=text/plain`,
           { headers: { Authorization: `Bearer ${accessToken}` } }
         )
         if (!response.ok) {
@@ -81,34 +87,19 @@ export default function SongViewer({ song, accessToken, activeSetlistId, onAddTo
     }
 
     fetchContent()
-  }, [song?.id, accessToken])
+  }, [song?.id, song?.driveId, accessToken])
 
-  if (!song) {
-    return (
-      <Box
-        sx={{
-          flex: 1,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          flexDirection: 'column',
-          gap: 2,
-          color: 'text.disabled',
-        }}
-      >
-        <MusicNoteIcon sx={{ fontSize: 64 }} />
-        <Typography variant="body1">Select a song to view its content</Typography>
-      </Box>
-    )
-  }
+  if (!song) return null
+
+  const hasLyricSheet = song.driveId || (song.id && !song.id.startsWith('manual-'))
 
   return (
-    <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-      {/* Static header — title stays pinned */}
+    <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', height: '100vh' }}>
+      {/* Title bar — includes back button + autoscroll controls */}
       <Box
         sx={{
-          px: 2,
-          py: 1.5,
+          px: 1.5,
+          py: 0.75,
           display: 'flex',
           alignItems: 'center',
           gap: 1,
@@ -116,25 +107,69 @@ export default function SongViewer({ song, accessToken, activeSetlistId, onAddTo
           borderBottom: 1,
           borderColor: 'divider',
           flexShrink: 0,
+          minHeight: 48,
         }}
       >
         {onBack && (
-          <Tooltip title="Back to songs">
-            <IconButton onClick={onBack} size="small" sx={{ mr: 0.5 }}>
+          <Tooltip title="Back">
+            <IconButton onClick={onBack} size="small">
               <ArrowBackIcon />
             </IconButton>
           </Tooltip>
         )}
-        <MusicNoteIcon color="primary" />
-        <Typography variant="h6" fontWeight={600} sx={{ flex: 1 }} noWrap>
+
+        <MusicNoteIcon color="primary" sx={{ flexShrink: 0 }} />
+
+        <Typography
+          variant="h6"
+          fontWeight={600}
+          sx={{ flex: 1, minWidth: 0 }}
+          noWrap
+        >
           {song.name}
         </Typography>
-        {activeSetlistId && (
-          <Tooltip title="Add to current setlist">
-            <IconButton color="primary" onClick={() => onAddToSetlist(song)}>
-              <AddIcon />
+
+        {/* Autoscroll controls — shown once content loads */}
+        {content && !loading && (
+          <>
+            <Button
+              size="small"
+              variant="outlined"
+              onClick={() => setSpeed((s) => Math.max(MIN_SPEED, s - SPEED_STEP))}
+              disabled={speed <= MIN_SPEED}
+              sx={{ minWidth: 72 }}
+            >
+              Slower
+            </Button>
+
+            <IconButton
+              onClick={() => setAutoscroll((v) => !v)}
+              color={autoscroll ? 'secondary' : 'primary'}
+              sx={{
+                border: 2,
+                borderColor: autoscroll ? 'secondary.main' : 'primary.main',
+                p: 0.75,
+              }}
+            >
+              {autoscroll ? <PauseIcon /> : <PlayArrowIcon />}
             </IconButton>
-          </Tooltip>
+
+            <Button
+              size="small"
+              variant="outlined"
+              onClick={() => setSpeed((s) => Math.min(MAX_SPEED, s + SPEED_STEP))}
+              disabled={speed >= MAX_SPEED}
+              sx={{ minWidth: 72 }}
+            >
+              Faster
+            </Button>
+
+            <Chip
+              label={`${speed} px/s`}
+              size="small"
+              sx={{ fontVariantNumeric: 'tabular-nums', minWidth: 64 }}
+            />
+          </>
         )}
       </Box>
 
@@ -146,6 +181,23 @@ export default function SongViewer({ song, accessToken, activeSetlistId, onAddTo
           </Box>
         )}
         {error && <Alert severity="error">{error}</Alert>}
+        {!hasLyricSheet && !loading && (
+          <Box
+            sx={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              pt: 6,
+              gap: 1,
+              color: 'text.disabled',
+            }}
+          >
+            <ArticleOffIcon sx={{ fontSize: 48, opacity: 0.4 }} />
+            <Typography variant="body2" color="text.secondary">
+              No lyric sheet available for this song.
+            </Typography>
+          </Box>
+        )}
         {content !== null && !loading && (
           <Typography
             component="pre"
@@ -162,61 +214,6 @@ export default function SongViewer({ song, accessToken, activeSetlistId, onAddTo
           </Typography>
         )}
       </Box>
-
-      {/* Autoscroll controls — shown once content is loaded */}
-      {content && !loading && (
-        <Box
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 1.5,
-            px: 3,
-            py: 1.5,
-            bgcolor: 'background.paper',
-            borderTop: 1,
-            borderColor: 'divider',
-            flexShrink: 0,
-          }}
-        >
-          <Button
-            variant="outlined"
-            onClick={() => setSpeed((s) => Math.max(MIN_SPEED, s - SPEED_STEP))}
-            disabled={speed <= MIN_SPEED}
-            sx={{ minWidth: 90, py: 1.25, fontSize: '0.9rem' }}
-          >
-            Slower
-          </Button>
-
-          <IconButton
-            onClick={() => setAutoscroll((v) => !v)}
-            color={autoscroll ? 'secondary' : 'primary'}
-            sx={{
-              border: 2,
-              borderColor: autoscroll ? 'secondary.main' : 'primary.main',
-              p: 1.5,
-              '&:hover': { opacity: 0.85 },
-            }}
-          >
-            {autoscroll ? <PauseIcon fontSize="large" /> : <PlayArrowIcon fontSize="large" />}
-          </IconButton>
-
-          <Button
-            variant="outlined"
-            onClick={() => setSpeed((s) => Math.min(MAX_SPEED, s + SPEED_STEP))}
-            disabled={speed >= MAX_SPEED}
-            sx={{ minWidth: 90, py: 1.25, fontSize: '0.9rem' }}
-          >
-            Faster
-          </Button>
-
-          <Chip
-            label={`${speed} px/s`}
-            size="small"
-            sx={{ ml: 1, fontVariantNumeric: 'tabular-nums', minWidth: 70 }}
-          />
-        </Box>
-      )}
     </Box>
   )
 }
