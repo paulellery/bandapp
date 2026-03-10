@@ -1,20 +1,40 @@
 name: Auto-merge Claude PRs
 
 on:
+  push:
+    branches:
+      - 'claude/**'
   pull_request:
     types: [opened, synchronize, reopened]
     branches: [main]
 
 jobs:
   auto-merge:
-    if: startsWith(github.head_ref, 'claude/')
+    if: startsWith(github.head_ref || github.ref_name, 'claude/')
     runs-on: ubuntu-latest
     permissions:
       contents: write
       pull-requests: write
     steps:
+      - name: Create PR if it doesn't exist
+        if: github.event_name == 'push'
+        run: |
+          existing=$(gh pr list --head "${{ github.ref_name }}" --base main --json number --jq '.[0].number')
+          if [ -z "$existing" ]; then
+            gh pr create \
+              --base main \
+              --head "${{ github.ref_name }}" \
+              --title "Auto: ${{ github.ref_name }}" \
+              --body "Automated deployment from Claude session."
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+
       - name: Enable auto-merge
-        run: gh pr merge "${{ github.event.pull_request.number }}" --merge --auto
+        run: |
+          pr=$(gh pr list --head "${{ github.head_ref || github.ref_name }}" --base main --json number --jq '.[0].number')
+          gh pr merge "$pr" --merge --auto
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
