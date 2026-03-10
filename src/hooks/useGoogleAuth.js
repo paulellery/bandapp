@@ -1,8 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 
 const CLIENT_ID = '310622956672-ck8fgpad6pombgb8vobd5fdh67kqbfka.apps.googleusercontent.com'
-const SCOPES = 'https://www.googleapis.com/auth/drive.readonly'
-const STORAGE_KEY = 'bandapp_auth'
+// drive.readonly  — read song docs from Drive
+// drive.file      — create/update bandapp.json (files created by this app)
+const SCOPES =
+  'https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/drive.file'
+const STORAGE_KEY = 'bandapp_auth_v2' // bumped to force re-auth after scope change
 
 function saveAuth(user, token) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify({
