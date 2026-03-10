@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   ThemeProvider,
   createTheme,
@@ -14,6 +14,7 @@ import {
   Tooltip,
   Snackbar,
   Alert,
+  CircularProgress,
   useMediaQuery,
 } from '@mui/material'
 import MenuIcon from '@mui/icons-material/Menu'
@@ -21,10 +22,11 @@ import QueueMusicIcon from '@mui/icons-material/QueueMusic'
 import LogoutIcon from '@mui/icons-material/Logout'
 import LoginIcon from '@mui/icons-material/Login'
 import SettingsIcon from '@mui/icons-material/Settings'
+import CloudDoneIcon from '@mui/icons-material/CloudDone'
+import CloudOffIcon from '@mui/icons-material/CloudOff'
 
 import { useGoogleAuth } from './hooks/useGoogleAuth'
-import { useSetlists } from './hooks/useSetlists'
-import { useSongs } from './hooks/useSongs'
+import { useDriveStorage } from './hooks/useDriveStorage'
 import Sidebar from './components/Sidebar'
 import SongList from './components/SongList'
 import SetlistView from './components/SetlistView'
@@ -50,25 +52,36 @@ const FOLDER_KEY = 'setlist-app-folder-id'
 export default function App() {
   const { user, accessToken, signIn, signOut, isSignedIn } = useGoogleAuth()
   const {
+    songs,
     setlists,
+    loaded,
+    syncing,
+    syncError,
+    importFromDrive,
+    addManualSong,
+    removeSong,
     createSetlist,
     deleteSetlist,
     renameSetlist,
     addSongToSetlist,
     removeSongFromSetlist,
     moveSongInSetlist,
-  } = useSetlists()
-  const { songs, importFromDrive, addManualSong, removeSong } = useSongs()
+  } = useDriveStorage(accessToken)
 
   const [folderId, setFolderId] = useState(() => localStorage.getItem(FOLDER_KEY) || '')
   const [selectedSong, setSelectedSong] = useState(null)
   const [currentView, setCurrentView] = useState(null) // null = All Songs, or setlistId
-  const [sidebarOpen, setSidebarOpen] = useState(false) // mobile drawer
+  const [sidebarOpen, setSidebarOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [importing, setImporting] = useState(false)
   const [snackbar, setSnackbar] = useState(null)
 
   const isMobile = useMediaQuery(theme.breakpoints.down('md'))
+
+  // Surface Drive sync errors as a snackbar
+  useEffect(() => {
+    if (syncError) setSnackbar({ severity: 'error', message: syncError })
+  }, [syncError])
 
   const handleFolderSet = (id) => {
     setFolderId(id)
@@ -89,9 +102,10 @@ export default function App() {
       const added = importFromDrive(driveSongs)
       setSnackbar({
         severity: 'success',
-        message: added > 0
-          ? `Added ${added} new song${added !== 1 ? 's' : ''} from Drive`
-          : 'All songs already imported',
+        message:
+          added > 0
+            ? `Added ${added} new song${added !== 1 ? 's' : ''} from Drive`
+            : 'All songs already imported',
       })
     } catch (err) {
       console.error('Drive import failed:', err)
@@ -148,6 +162,30 @@ export default function App() {
     </Box>
   )
 
+  // Sync status shown in the app bar
+  const SyncIndicator = () => {
+    if (!isSignedIn || !loaded) return null
+    if (syncing) {
+      return (
+        <Tooltip title="Saving to Drive…">
+          <CircularProgress size={16} color="inherit" sx={{ opacity: 0.7, mr: 1 }} />
+        </Tooltip>
+      )
+    }
+    if (syncError) {
+      return (
+        <Tooltip title={syncError}>
+          <CloudOffIcon fontSize="small" sx={{ opacity: 0.7, mr: 1, color: 'error.light' }} />
+        </Tooltip>
+      )
+    }
+    return (
+      <Tooltip title="Saved to Drive">
+        <CloudDoneIcon fontSize="small" sx={{ opacity: 0.35, mr: 1 }} />
+      </Tooltip>
+    )
+  }
+
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
@@ -172,6 +210,8 @@ export default function App() {
               <Typography variant="h6" fontWeight={700} sx={{ flexGrow: 1 }}>
                 Setlist App
               </Typography>
+
+              <SyncIndicator />
 
               <Tooltip title="Settings">
                 <IconButton
@@ -220,13 +260,8 @@ export default function App() {
 
         {/* Main layout */}
         {selectedSong ? (
-          /* Full-screen song viewer — no app bar */
           <Box sx={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-            <SongViewer
-              song={selectedSong}
-              accessToken={accessToken}
-              onBack={handleBack}
-            />
+            <SongViewer song={selectedSong} accessToken={accessToken} onBack={handleBack} />
           </Box>
         ) : (
           <Box sx={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
@@ -247,7 +282,7 @@ export default function App() {
               </Box>
             )}
 
-            {/* Main content area */}
+            {/* Main content */}
             <Box
               sx={{
                 flex: 1,
@@ -257,32 +292,7 @@ export default function App() {
                 bgcolor: 'background.default',
               }}
             >
-              {isSignedIn ? (
-                currentView === null ? (
-                  <SongList
-                    songs={songs}
-                    setlists={setlists}
-                    folderId={folderId}
-                    onSongSelect={handleSongSelect}
-                    selectedSongId={selectedSong?.id}
-                    onAddToSetlist={handleAddToSetlist}
-                    onRemoveSong={removeSong}
-                    onImportFromDrive={handleImportFromDrive}
-                    onAddManualSong={addManualSong}
-                    onOpenSettings={() => setSettingsOpen(true)}
-                    importing={importing}
-                  />
-                ) : (
-                  <SetlistView
-                    setlist={currentSetlist}
-                    allSongs={songs}
-                    selectedSongId={selectedSong?.id}
-                    onSongSelect={handleSongSelect}
-                    onRemoveSong={removeSongFromSetlist}
-                    onMoveSong={moveSongInSetlist}
-                  />
-                )
-              ) : (
+              {!isSignedIn ? (
                 <Box
                   sx={{
                     flex: 1,
@@ -296,12 +306,49 @@ export default function App() {
                 >
                   <Typography variant="body1">Sign in to get started</Typography>
                 </Box>
+              ) : !loaded ? (
+                <Box
+                  sx={{
+                    flex: 1,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 2,
+                    color: 'text.secondary',
+                  }}
+                >
+                  <CircularProgress size={24} />
+                  <Typography variant="body2">Loading from Drive…</Typography>
+                </Box>
+              ) : currentView === null ? (
+                <SongList
+                  songs={songs}
+                  setlists={setlists}
+                  folderId={folderId}
+                  onSongSelect={handleSongSelect}
+                  selectedSongId={selectedSong?.id}
+                  onAddToSetlist={handleAddToSetlist}
+                  onRemoveSong={removeSong}
+                  onImportFromDrive={handleImportFromDrive}
+                  onAddManualSong={addManualSong}
+                  onOpenSettings={() => setSettingsOpen(true)}
+                  importing={importing}
+                />
+              ) : (
+                <SetlistView
+                  setlist={currentSetlist}
+                  allSongs={songs}
+                  selectedSongId={selectedSong?.id}
+                  onSongSelect={handleSongSelect}
+                  onRemoveSong={removeSongFromSetlist}
+                  onMoveSong={moveSongInSetlist}
+                />
               )}
             </Box>
           </Box>
         )}
 
-        {/* Mobile sidebar drawer — left */}
+        {/* Mobile sidebar drawer */}
         <Drawer
           anchor="left"
           open={sidebarOpen}
@@ -323,16 +370,12 @@ export default function App() {
         {/* Snackbar feedback */}
         <Snackbar
           open={!!snackbar}
-          autoHideDuration={3000}
+          autoHideDuration={4000}
           onClose={() => setSnackbar(null)}
           anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
         >
           {snackbar && (
-            <Alert
-              severity={snackbar.severity}
-              onClose={() => setSnackbar(null)}
-              variant="filled"
-            >
+            <Alert severity={snackbar.severity} onClose={() => setSnackbar(null)} variant="filled">
               {snackbar.message}
             </Alert>
           )}
