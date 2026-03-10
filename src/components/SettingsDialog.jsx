@@ -11,7 +11,7 @@ import {
 import CloseIcon from '@mui/icons-material/Close'
 import FolderPicker from './FolderPicker'
 
-export default function SettingsDialog({ open, onClose, folderId, onFolderSet }) {
+export default function SettingsDialog({ open, onClose, folderId, onFolderSet, accessToken }) {
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', pb: 1 }}>
@@ -27,6 +27,7 @@ export default function SettingsDialog({ open, onClose, folderId, onFolderSet })
         </Typography>
         <FolderPicker
           currentFolderId={folderId}
+          accessToken={accessToken}
           onFolderSet={(id) => {
             onFolderSet(id)
             onClose()

@@ -317,6 +317,7 @@ export default function App() {
           onClose={() => setSettingsOpen(false)}
           folderId={folderId}
           onFolderSet={handleFolderSet}
+          accessToken={accessToken}
         />
 
         {/* Snackbar feedback */}
