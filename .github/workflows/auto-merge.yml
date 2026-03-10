@@ -31,10 +31,10 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
 
-      - name: Enable auto-merge
+      - name: Merge PR
         run: |
           pr=$(gh pr list --head "${{ github.head_ref || github.ref_name }}" --base main --json number --jq '.[0].number')
-          gh pr merge "$pr" --merge --auto
+          gh pr merge "$pr" --merge --delete-branch
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
