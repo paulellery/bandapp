@@ -208,7 +208,7 @@ export default function App() {
 
               <QueueMusicIcon sx={{ mr: 1 }} />
               <Typography variant="h6" fontWeight={700} sx={{ flexGrow: 1 }}>
-                Setlist App
+                BandApp
               </Typography>
 
               <SyncIndicator />
